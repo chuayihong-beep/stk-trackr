@@ -43,12 +43,22 @@ Keep the types in `lib/types.ts`. Replace the functions in `lib/data.ts` with fe
 Worker (for example `GET /api/overview`, `GET /api/securities/:id`). Keep the watchlist in the
 Worker and call it from `lib/watchlist.tsx`. Add a login gate in front of all routes (single owner).
 
+## Database (Supabase)
+
+Schema: `supabase/migrations/20261103000000_initial_schema.sql` (brief §5, Postgres).
+
+- Run it once in the Supabase SQL Editor.
+- Only the owner account (`is_owner()`) can read data; logged-out visitors are refused.
+- The browser can change only the watchlist. Collectors write with the secret key, server-side.
+- Indirect links must reference a recorded relationship (enforced by a check constraint).
+- Turn off public sign-ups in Authentication settings.
+
 ## Deploy (Cloudflare Workers, static assets)
 
 Connected to Workers Builds. Settings in the Cloudflare dashboard:
 
-- Build command: `npm run build`
-- Deploy command: `npx wrangler deploy`
+- Deploy command: `npx wrangler deploy` (runs `npm run build` itself via `wrangler.jsonc`)
+- Build command: optional
 
 `wrangler.jsonc` serves `dist/` and falls back to `index.html` for app routes. The Worker
 name in `wrangler.jsonc` must match the Worker name in the dashboard. Private APIs and
