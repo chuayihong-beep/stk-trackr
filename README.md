@@ -43,7 +43,13 @@ Keep the types in `lib/types.ts`. Replace the functions in `lib/data.ts` with fe
 Worker (for example `GET /api/overview`, `GET /api/securities/:id`). Keep the watchlist in the
 Worker and call it from `lib/watchlist.tsx`. Add a login gate in front of all routes (single owner).
 
-## Deploy
+## Deploy (Cloudflare Workers, static assets)
 
-Cloudflare Pages: build command `npm run build`, output directory `dist`. `public/_redirects`
-provides the SPA fallback. The brief's private APIs go in a Worker, not in this static bundle.
+Connected to Workers Builds. Settings in the Cloudflare dashboard:
+
+- Build command: `npm run build`
+- Deploy command: `npx wrangler deploy`
+
+`wrangler.jsonc` serves `dist/` and falls back to `index.html` for app routes. The Worker
+name in `wrangler.jsonc` must match the Worker name in the dashboard. Private APIs and
+secrets do not go in this static bundle.
