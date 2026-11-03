@@ -5,7 +5,7 @@ import { EventCard } from '../components/EventCard';
 import { ListingLabel } from '../components/Badges';
 import { useStore, type NewListing } from '../lib/store';
 
-const BLANK: NewListing = { company: '', symbol: '', exchangeMic: '', exchangeName: '', currency: '', country: '', sector: '', isin: '' };
+const BLANK: NewListing = { company: '', symbol: '', exchangeMic: '', exchangeName: '', currency: '', country: '', sector: '', isin: '', aliases: '' };
 
 export function Search() {
   const [q, setQ] = useState('');
@@ -145,6 +145,10 @@ function AddListing() {
         {field('country', 'Country', { placeholder: 'MY', pattern: '[A-Za-z]{2}', maxLength: 2, hint: '2-letter ISO country code' })}
         {field('sector', 'Sector', { required: false, placeholder: 'Banking' })}
         {field('isin', 'ISIN', { required: false, pattern: '[A-Za-z]{2}[A-Za-z0-9]{9}[0-9]', maxLength: 12, hint: '12-character ISIN' })}
+        <div className="sm:col-span-2 lg:col-span-4">
+          {field('aliases', 'Also known as', { required: false, placeholder: 'Maybank, MBB', hint: 'Comma-separated names used in headlines' })}
+          <p className="mt-1 text-xs text-slate-500">Headlines rarely use legal names. The collector matches the company name and these names, not the ticker.</p>
+        </div>
         <div className="flex flex-wrap items-center gap-3 sm:col-span-2 lg:col-span-4">
           <button type="submit" disabled={busy} className="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-60">
             {busy ? 'Saving…' : 'Register listing'}

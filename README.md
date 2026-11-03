@@ -19,7 +19,8 @@ sample data, so the UI can be used and reviewed before the collectors and Worker
 | Watchlist | Stored in Supabase (`watchlist`) |
 | Listing registry | Manual entry on Search until a symbol-search provider is chosen |
 | Times: stored UTC, shown MYT; schedule 48 + 32 = 80 runs/day | Live |
-| News collector (Scrapling / RSS / GDELT), dedup, clustering | Next |
+| News collector: Google News RSS via Scrapling, dedup L1/L2, event clustering, direct links | Live (GitHub Actions) |
+| Indirect links (relationships), GDELT, publisher RSS | Next |
 | Delayed price adapter | Not started |
 
 ## Structure
@@ -33,6 +34,29 @@ sample data, so the UI can be used and reviewed before the collectors and Worker
       lib/data.ts         price formatting helpers
       components/         badges, layout, event card
       pages/              Overview, Search, Favourites, StockDetail, Settings
+
+## News collector (`collector/`, GitHub Actions)
+
+`.github/workflows/collect.yml` runs `python -m stk_collector` on the brief's schedule
+(every 10 min 09:00–16:50 MYT, every 30 min otherwise). Each run:
+
+1. Reads active watchlist listings and builds pooled Google News RSS searches from company
+   names and aliases (never tickers, which collide across markets).
+2. Fetches with Scrapling's plain HTTP `Fetcher`: honest user agent, no stealth or bypass, retries with delay.
+3. Validates publisher timestamps (missing / future / invalid are flagged; discovery time stored separately).
+4. Dedups by canonical URL (L1) and headline fingerprint + publisher (L2) over 72 h.
+5. Clusters headlines about the same event (L3, conservative word overlap) and links each
+   event to the listings named in the headline. Aliases give medium confidence, legal names high.
+6. Records the run in `collector_runs` and source health in `news_sources`. A failed fetch
+   never advances `last_success_at`.
+
+Setup: add the repository secret `SUPABASE_SECRET_KEY` (Supabase → Project Settings → API Keys → secret key).
+Run once by hand from Actions → Collect news → Run workflow.
+
+This repo is public, so Actions logs are public. The collector prints counts only.
+GitHub disables scheduled workflows after 60 days without repository activity; re-enable from the Actions tab.
+
+Tests: `cd collector && python -m unittest discover -s tests`.
 
 ## Database (Supabase)
 

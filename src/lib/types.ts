@@ -12,6 +12,7 @@ export interface Security {
   country: string;
   isin?: string;
   sector: string;
+  aliases: string[]; // extra names the collector matches in headlines
 }
 
 export interface Quote {

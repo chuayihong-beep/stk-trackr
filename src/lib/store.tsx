@@ -33,6 +33,7 @@ export interface NewListing {
   country: string;
   sector?: string;
   isin?: string;
+  aliases?: string; // comma-separated
 }
 
 export interface EventLink { event: EventItem; link: SecurityEvent }
@@ -65,6 +66,7 @@ type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-exp
 const toSecurity = (r: Row): Security => ({
   id: r.id, company: r.company, symbol: r.symbol, exchangeMic: r.exchange_mic, exchangeName: r.exchange_name,
   currency: r.currency as Currency, country: r.country, isin: r.isin ?? undefined, sector: r.sector ?? '',
+  aliases: r.aliases ?? [],
 });
 const toQuote = (r: Row): Quote => ({
   securityId: r.security_id, value: Number(r.value), currency: r.currency, marketAt: r.market_at,
@@ -186,7 +188,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       latestEvents: (limit = 10) => snap.events.slice(0, limit),
       linksForEvent: (eventId) => snap.links.filter((l) => l.eventId === eventId),
       searchSecurities: (q) => (q.trim()
-        ? snap.securities.filter((s) => match(q, [s.company, s.symbol, s.exchangeName, s.exchangeMic, s.country, s.sector]))
+        ? snap.securities.filter((s) => match(q, [s.company, s.symbol, s.exchangeName, s.exchangeMic, s.country, s.sector, ...s.aliases]))
         : snap.securities),
       searchEvents: (q) => (q.trim() ? snap.events.filter((e) => match(q, [e.title, e.summary, ...e.themes])) : []),
       isWatched: (id) => snap.watchlist.includes(id),
@@ -220,6 +222,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           country: l.country.trim().toUpperCase(),
           sector: l.sector?.trim() || null,
           isin: l.isin?.trim().toUpperCase() || null,
+          aliases: (l.aliases ?? '').split(',').map((a) => a.trim()).filter((a) => a.length >= 3),
         }).select('*').single();
         if (err) {
           return { error: err.code === '23505' ? 'That symbol is already registered on this exchange.' : err.message };

@@ -40,7 +40,8 @@ export function StockDetail() {
         <div className="min-w-0">
           <h1 className="text-xl font-semibold">{s.company}</h1>
           <div className="mt-1.5"><ListingLabel s={s} /></div>
-          <div className="mt-1 text-xs text-slate-500">Country {s.country} · {s.sector}{s.isin ? ` · ISIN ${s.isin}` : ''}</div>
+          <div className="mt-1 text-xs text-slate-500">Country {s.country}{s.sector ? ` · ${s.sector}` : ''}{s.isin ? ` · ISIN ${s.isin}` : ''}</div>
+          {s.aliases.length > 0 && <div className="mt-1 text-xs text-slate-500">Also matched as: {s.aliases.join(', ')}</div>}
           <p className="mt-3 text-xs text-slate-500">
             Ticker “{s.symbol}” is not unique worldwide. This page is for this listing only.
           </p>
