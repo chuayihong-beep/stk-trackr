@@ -8,13 +8,17 @@ import sys
 
 from .db import SupabaseStore
 from .pipeline import run, summary
+from .sources import silence_scrapling
 
 DEFAULT_URL = "https://vewqmxhweysgtkieahij.supabase.co"
 
 
 def main() -> int:
-    # Scrapling logs every fetched URL; those contain watchlist names and Actions logs are public.
-    logging.getLogger("scrapling").setLevel(logging.CRITICAL)
+    # Scrapling logs every fetched URL (containing watchlist names) and resets its level on import,
+    # so import it first, then silence it. Actions logs are public in this repo.
+    import scrapling.fetchers  # noqa: F401
+
+    silence_scrapling()
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
     key = os.environ.get("SUPABASE_SECRET_KEY", "").strip()

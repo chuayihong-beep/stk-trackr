@@ -1,6 +1,7 @@
 """Google News RSS adapter. Fetches with Scrapling's plain HTTP Fetcher (no stealth, honest UA)."""
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Callable
@@ -30,8 +31,19 @@ class FetchResult:
     errors: list[str] = field(default_factory=list)  # sanitised: never contains query text
 
 
+def silence_scrapling() -> None:
+    """Scrapling logs every fetched URL at INFO, and its import resets the level to INFO.
+    URLs contain watchlist names and Actions logs are public, so call this AFTER importing it."""
+    lg = logging.getLogger("scrapling")
+    lg.setLevel(logging.CRITICAL + 1)
+    lg.disabled = True
+    lg.propagate = False
+
+
 def scrapling_fetch(url: str) -> tuple[int, bytes]:
     from scrapling.fetchers import Fetcher  # imported lazily so tests need no network stack
+
+    silence_scrapling()
 
     resp = Fetcher.get(
         url,
