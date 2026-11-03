@@ -1,12 +1,11 @@
 import { SourceStatusBadge, FreshnessBadge } from '../components/Badges';
-import { getRuns, getSources } from '../lib/data';
+import { useStore } from '../lib/store';
 import { APP_TZ, isScheduledSlot, nextCollectionRun, formatMYT, formatMYTTime } from '../lib/time';
 import { useNow } from '../lib/useNow';
 
 export function Settings() {
   const now = useNow();
-  const sources = getSources();
-  const runs = getRuns();
+  const { sources, runs } = useStore();
 
   // Count the scheduled slots in one MYT day, so the number shown is derived from the rule, not typed in.
   let active = 0;
@@ -51,7 +50,8 @@ export function Settings() {
 
       <section aria-labelledby="src-h" className="space-y-3">
         <h2 id="src-h" className="text-base font-semibold">Sources and quotas</h2>
-        <ul className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white">
+        {sources.length === 0 && <p className="text-sm text-slate-500">No sources configured yet. The collector registers them when it first runs.</p>}
+        <ul className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white empty:hidden">
           {sources.map((s) => (
             <li key={s.id} className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
               <div>
@@ -77,6 +77,7 @@ export function Settings() {
 
       <section aria-labelledby="runs-h" className="space-y-3">
         <h2 id="runs-h" className="text-base font-semibold">Recent collector runs</h2>
+        {runs.length === 0 && <p className="text-sm text-slate-500">No runs recorded yet.</p>}
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
           <table className="w-full min-w-[32rem] text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">

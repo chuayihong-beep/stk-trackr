@@ -32,8 +32,9 @@ export function formatMYTTime(iso: string | Date): string {
 export function relativeTime(iso: string | null | undefined, now: Date = new Date()): string {
   if (!iso) return 'never';
   const diffMs = now.getTime() - new Date(iso).getTime();
-  if (diffMs < 0) return 'in the future';
-  const mins = Math.round(diffMs / 60_000);
+  // Allow a minute of clock skew (the "now" clock ticks once per minute).
+  if (diffMs < -60_000) return 'in the future';
+  const mins = Math.round(Math.max(0, diffMs) / 60_000);
   if (mins < 1) return 'just now';
   if (mins < 60) return `${mins} min ago`;
   const hours = Math.round(mins / 60);

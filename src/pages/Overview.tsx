@@ -2,21 +2,19 @@ import { Link } from 'react-router-dom';
 import { Star, Clock } from 'lucide-react';
 import { EventCard } from '../components/EventCard';
 import { FreshnessBadge, ListingLabel, QuoteBlock, SourceStatusBadge } from '../components/Badges';
-import { eventsFor, getQuote, getRuns, getSecurity, getSources, latestEvents } from '../lib/data';
-import { useWatchlist } from '../lib/watchlist';
+import { useStore } from '../lib/store';
 import { formatMYT, nextCollectionRun, relativeTime } from '../lib/time';
 import { useNow } from '../lib/useNow';
 
 export function Overview() {
-  const { ids } = useWatchlist();
+  const { watchlist: ids, getSecurity, getQuote, eventsFor, latestEvents, sources, runs } = useStore();
   const now = useNow();
   const watched = ids.map(getSecurity).filter((s): s is NonNullable<typeof s> => Boolean(s));
-  const sources = getSources();
   const healthy = sources.filter((s) => s.status === 'ok').length;
   const nextRun = nextCollectionRun(now);
   const directCount = watched.reduce((n, s) => n + eventsFor(s.id).filter((x) => x.link.type === 'direct').length, 0);
   const indirectCount = watched.reduce((n, s) => n + eventsFor(s.id).filter((x) => x.link.type === 'indirect').length, 0);
-  const lastRun = getRuns()[0];
+  const lastRun = runs[0];
 
   return (
     <div className="space-y-8">
@@ -58,14 +56,21 @@ export function Overview() {
         <section aria-labelledby="events-h" className="space-y-3 lg:col-span-2">
           <h2 id="events-h" className="text-base font-semibold">Latest events</h2>
           {latestEvents(8).map((e) => <EventCard key={e.id} event={e} />)}
+          {latestEvents(1).length === 0 && (
+            <p className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
+              No events yet. They appear once the news collector is running.
+            </p>
+          )}
         </section>
 
         <section aria-labelledby="status-h" className="space-y-3">
           <h2 id="status-h" className="text-base font-semibold">Collection status</h2>
           <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm">
             <div className="mb-3 flex items-center gap-2 text-slate-600">
-              <Clock className="h-4 w-4" aria-hidden /> Last run {relativeTime(lastRun?.startedAt, now)} · {lastRun?.status}
+              <Clock className="h-4 w-4" aria-hidden />
+              {lastRun ? <>Last run {relativeTime(lastRun.startedAt, now)} · {lastRun.status}</> : 'No collector runs yet'}
             </div>
+            {sources.length === 0 && <p className="text-xs text-slate-500">No sources configured yet.</p>}
             <ul className="divide-y divide-slate-100">
               {sources.map((src) => (
                 <li key={src.id} className="py-2.5">

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ChevronDown, ExternalLink } from 'lucide-react';
 import { ConfidenceBadge, RelevanceBadge, TimestampFlag } from './Badges';
 import { formatMYT, relativeTime } from '../lib/time';
-import { getArticle, getRelationship, getSecurity, linksForEvent } from '../lib/data';
+import { useStore } from '../lib/store';
 import type { EventItem, SecurityEvent } from '../lib/types';
 import { useNow } from '../lib/useNow';
 import { Link } from 'react-router-dom';
@@ -17,6 +17,7 @@ interface Props {
 export function EventCard({ event, forSecurity, defaultOpen = false }: Props) {
   const [open, setOpen] = useState(defaultOpen);
   const now = useNow();
+  const { getArticle, getRelationship, getSecurity, linksForEvent } = useStore();
   const articles = event.articleIds.map(getArticle).filter((a): a is NonNullable<typeof a> => Boolean(a));
   const links = linksForEvent(event.id);
   const outlets = new Set(articles.map((a) => a.publisher)).size;

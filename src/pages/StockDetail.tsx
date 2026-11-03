@@ -2,16 +2,17 @@ import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Star, StarOff } from 'lucide-react';
 import { EventCard } from '../components/EventCard';
 import { ListingLabel, QuoteBlock } from '../components/Badges';
-import { eventsFor, getQuote, getSecurity } from '../lib/data';
-import { relationships } from '../data/seed';
+import { useStore } from '../lib/store';
 import { formatMYT } from '../lib/time';
-import { useWatchlist } from '../lib/watchlist';
 import { useNow } from '../lib/useNow';
 
 export function StockDetail() {
   const { id = '' } = useParams();
+  const {
+    getSecurity, getQuote, eventsFor, relationships,
+    isWatched: has, addToWatchlist: add, removeFromWatchlist: remove,
+  } = useStore();
   const s = getSecurity(id);
-  const { has, add, remove } = useWatchlist();
   const now = useNow();
 
   if (!s) {
@@ -48,7 +49,7 @@ export function StockDetail() {
           <QuoteBlock s={s} quote={getQuote(s.id)} now={now} />
           <button
             type="button"
-            onClick={() => (watched ? remove(s.id) : add(s.id))}
+            onClick={() => void (watched ? remove(s.id) : add(s.id))}
             className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
           >
             {watched ? <><StarOff className="h-4 w-4" aria-hidden /> Remove from watchlist</> : <><Star className="h-4 w-4" aria-hidden /> Add to watchlist</>}

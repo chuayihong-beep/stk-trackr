@@ -1,12 +1,11 @@
 import { Link } from 'react-router-dom';
 import { Trash2 } from 'lucide-react';
 import { ListingLabel, QuoteBlock } from '../components/Badges';
-import { eventsFor, getQuote, getSecurity } from '../lib/data';
-import { useWatchlist } from '../lib/watchlist';
+import { useStore } from '../lib/store';
 import { useNow } from '../lib/useNow';
 
 export function Favourites() {
-  const { ids, remove } = useWatchlist();
+  const { watchlist: ids, removeFromWatchlist: remove, getSecurity, getQuote, eventsFor } = useStore();
   const now = useNow();
   const watched = ids.map(getSecurity).filter((s): s is NonNullable<typeof s> => Boolean(s));
 
@@ -32,7 +31,7 @@ export function Favourites() {
               <div className="min-w-[14rem]"><QuoteBlock s={s} quote={getQuote(s.id)} now={now} /></div>
               <button
                 type="button"
-                onClick={() => remove(s.id)}
+                onClick={() => void remove(s.id)}
                 className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
                 aria-label={`Remove ${s.company} (${s.exchangeMic})`}
               >
