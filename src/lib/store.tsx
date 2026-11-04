@@ -96,6 +96,7 @@ const toSecurity = (r: Row): Security => ({
   id: r.id, company: r.company, symbol: r.symbol, exchangeMic: r.exchange_mic, exchangeName: r.exchange_name,
   currency: r.currency as Currency, country: r.country, isin: r.isin ?? undefined, sector: r.sector ?? '',
   aliases: r.aliases ?? [],
+  priceProvider: r.price_provider ?? null, priceStatus: r.price_status ?? null,
 });
 const toQuote = (r: Row): Quote => ({
   securityId: r.security_id, value: Number(r.value), currency: r.currency, marketAt: r.market_at,

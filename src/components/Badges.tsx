@@ -70,10 +70,15 @@ export function ListingLabel({ s }: { s: Security }) {
 
 export function QuoteBlock({ s, quote, now }: { s: Security; quote: Quote | undefined; now: Date }) {
   if (!quote) {
+    const [title, note] =
+      s.priceStatus === 'unsupported' ? ['Price unavailable', `Not covered by the free price plans for ${s.exchangeName}.`]
+      : s.priceStatus === 'error' ? ['Price unavailable', 'Last price check failed. Retrying on the next run.']
+      : s.priceProvider === 'eodhd' ? ['Price pending', 'Fetched once a day, after 5pm MYT on weekdays.']
+      : ['Price pending', 'Prices refresh on weekdays, every 2 hours from 9am to 5pm MYT.'];
     return (
       <div>
-        <div className="text-lg font-semibold text-slate-400">Price unavailable</div>
-        <div className="text-xs text-slate-500">No supported delayed quote for {s.exchangeName}.</div>
+        <div className="text-lg font-semibold text-slate-400">{title}</div>
+        <div className="text-xs text-slate-500">{note}</div>
       </div>
     );
   }

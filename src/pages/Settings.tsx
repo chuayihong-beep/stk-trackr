@@ -48,6 +48,19 @@ export function Settings() {
         </p>
       </section>
 
+      <section aria-labelledby="px-h" className="space-y-2">
+        <h2 id="px-h" className="text-base font-semibold">Price schedule</h2>
+        <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+          <p>Weekdays at 09:15, 11:15, 13:15, 15:15 and 17:15 MYT. No price runs overnight or at weekends.</p>
+          <ul className="mt-2 list-inside list-disc space-y-1 text-slate-600">
+            <li>Twelve Data (free plan) serves every listing it covers, at each run.</li>
+            <li>Listings Twelve Data's free plan does not cover use EODHD's free plan once a day, at the 17:15 run after Bursa closes (max 18 a day).</li>
+            <li>Listings neither covers show “Price unavailable” and are re-checked weekly.</li>
+            <li>All prices are delayed or end-of-day. The app never shows live prices.</li>
+          </ul>
+        </div>
+      </section>
+
       <section aria-labelledby="src-h" className="space-y-3">
         <h2 id="src-h" className="text-base font-semibold">Sources and quotas</h2>
         {sources.length === 0 && <p className="text-sm text-slate-500">No sources configured yet. The collector registers them when it first runs.</p>}
@@ -85,7 +98,7 @@ export function Settings() {
                 <th className="px-4 py-2 font-medium">Started (MYT)</th>
                 <th className="px-4 py-2 font-medium">Source</th>
                 <th className="px-4 py-2 font-medium">Result</th>
-                <th className="px-4 py-2 font-medium">New / dupes</th>
+                <th className="px-4 py-2 font-medium">Saved / dupes</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">

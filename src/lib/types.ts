@@ -13,6 +13,8 @@ export interface Security {
   isin?: string;
   sector: string;
   aliases: string[]; // extra names the collector matches in headlines
+  priceProvider: 'twelvedata' | 'eodhd' | 'none' | null;
+  priceStatus: 'ok' | 'unsupported' | 'error' | null;
 }
 
 export interface Quote {

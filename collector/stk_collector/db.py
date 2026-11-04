@@ -89,5 +89,48 @@ class SupabaseStore:
                       json=rows, prefer="resolution=ignore-duplicates,return=minimal")
 
 
+    # -- prices --------------------------------------------------------------------
+    def load_price_targets(self) -> list[dict]:
+        rows = self._req("GET", "/watchlist", params={
+            "select": "securities(id,symbol,exchange_mic,currency,source_ids,price_provider,price_status,price_checked_at)",
+            "active": "eq.true",
+        })
+        return [r["securities"] for r in rows or [] if r.get("securities")]
+
+    def priced_since(self, provider: str, since: datetime) -> set[str]:
+        rows = self._req("GET", "/price_snapshots", params={
+            "select": "security_id", "provider": f"eq.{provider}", "ingested_at": f"gte.{since.isoformat()}",
+        })
+        return {r["security_id"] for r in rows or []}
+
+    def insert_snapshot(self, row: dict) -> None:
+        self._req("POST", "/price_snapshots", json=_jsonable(row), prefer="return=minimal")
+
+    def update_security(self, security_id: str, fields: dict) -> None:
+        self._req("PATCH", "/securities", params={"id": f"eq.{security_id}"}, json=_jsonable(fields),
+                  prefer="return=minimal")
+
+    def get_cache(self, key: str) -> Any:
+        rows = self._req("GET", "/app_cache", params={"select": "value", "key": f"eq.{key}"})
+        return rows[0]["value"] if rows else None
+
+    def set_cache(self, key: str, value: Any) -> None:
+        self._req("POST", "/app_cache", params={"on_conflict": "key"},
+                  json={"key": key, "value": value, "updated_at": datetime.now().astimezone().isoformat()},
+                  prefer="resolution=merge-duplicates,return=minimal")
+
+
+def http_get_json(url: str, params: dict, timeout: float = 20.0) -> tuple[int, Any]:
+    """GET for price providers. Errors are re-raised without the URL (it carries API keys)."""
+    try:
+        r = httpx.get(url, params=params, timeout=timeout, headers={"Accept": "application/json"})
+    except httpx.HTTPError as e:
+        raise ConnectionError(type(e).__name__) from None
+    try:
+        return r.status_code, r.json()
+    except ValueError:
+        return r.status_code, None
+
+
 def _jsonable(d: dict) -> dict:
     return {k: (v.isoformat() if isinstance(v, datetime) else v) for k, v in d.items()}

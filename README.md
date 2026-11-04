@@ -21,7 +21,7 @@ sample data, so the UI can be used and reviewed before the collectors and Worker
 | Times: stored UTC, shown MYT; schedule 48 + 32 = 80 runs/day | Live |
 | News collector: Google News RSS via Scrapling, dedup L1/L2, event clustering, direct links | Live (GitHub Actions) |
 | Indirect links (relationships), GDELT, publisher RSS | Next |
-| Delayed price adapter | Not started |
+| Delayed prices: Twelve Data free + EODHD free fallback, weekdays 2-hourly | Live (GitHub Actions) |
 
 ## Structure
 
@@ -58,6 +58,20 @@ GitHub disables scheduled workflows after 60 days without repository activity; r
 
 Tests: `cd collector && python -m unittest discover -s tests`.
 
+## Price collector (`python -m stk_collector prices`)
+
+`.github/workflows/prices.yml` runs on weekdays at 09:15, 11:15, 13:15, 15:15 and 17:15 MYT.
+
+- Twelve Data (free: 800 credits/day, 8/min) serves every watched listing it covers, each run,
+  paced to stay under 8 calls a minute and capped at 700 a day to leave room for searches.
+- Listings not on Twelve Data's free plan fall back to EODHD's free plan (20 calls/day), fetched once
+  a day at the 17:15 run, capped at 18. Daily usage is counted in `app_cache`, including failures.
+- Listings neither covers are marked unsupported, shown as "Price unavailable", and re-checked weekly.
+- Each listing's route is stored in `securities.price_provider`; prices go to `price_snapshots`
+  with the provider's quote time. All prices are delayed or end-of-day.
+
+Secrets (GitHub → Settings → Secrets and variables → Actions): `TWELVE_DATA_API_KEY`, `EODHD_API_KEY` (optional).
+
 ## Worker API (`worker/index.ts`)
 
 Requests to `/api/*` run the Worker first; everything else is the static app.
@@ -71,7 +85,7 @@ Secret (Cloudflare → Workers & Pages → stk-trackr → Settings → Variables
 
 ## Database (Supabase)
 
-Migrations in `supabase/migrations/` (brief §5, Postgres). Run each once, in filename order, in the Supabase SQL Editor.
+Migrations in `supabase/migrations/` (4 so far) (brief §5, Postgres). Run each once, in filename order, in the Supabase SQL Editor.
 
 - Only the owner account (`is_owner()`) can read data; logged-out visitors are refused.
 - The browser can change only the watchlist. Collectors write with the secret key, server-side.
