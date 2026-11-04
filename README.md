@@ -17,7 +17,7 @@ sample data, so the UI can be used and reviewed before the collectors and Worker
 | Owner sign-in (Supabase Auth, email + password) | Live |
 | Overview, Search, Favourites, Stock detail, Settings | Live, reading Supabase |
 | Watchlist | Stored in Supabase (`watchlist`) |
-| Listing registry | Manual entry on Search until a symbol-search provider is chosen |
+| Listing registry | Global search via Twelve Data (Worker `/api/symbol-search`, owner-only), plus manual entry |
 | Times: stored UTC, shown MYT; schedule 48 + 32 = 80 runs/day | Live |
 | News collector: Google News RSS via Scrapling, dedup L1/L2, event clustering, direct links | Live (GitHub Actions) |
 | Indirect links (relationships), GDELT, publisher RSS | Next |
@@ -57,6 +57,17 @@ This repo is public, so Actions logs are public. The collector prints counts onl
 GitHub disables scheduled workflows after 60 days without repository activity; re-enable from the Actions tab.
 
 Tests: `cd collector && python -m unittest discover -s tests`.
+
+## Worker API (`worker/index.ts`)
+
+Requests to `/api/*` run the Worker first; everything else is the static app.
+Every API call needs the owner's Supabase session (checked against Supabase Auth, then the owner email).
+
+- `GET /api/symbol-search?q=` — global listing search through Twelve Data. Returns symbol, exchange MIC,
+  currency, ISO country, and which provider plan covers the listing's price data.
+
+Secret (Cloudflare → Workers & Pages → stk-trackr → Settings → Variables and Secrets):
+`TWELVE_DATA_API_KEY` (type: Secret). Public values live in `wrangler.jsonc` `vars`.
 
 ## Database (Supabase)
 

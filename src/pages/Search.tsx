@@ -1,9 +1,11 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Check, Radar } from 'lucide-react';
+import { Plus, Check, Radar, Globe2, Loader2 } from 'lucide-react';
 import { EventCard } from '../components/EventCard';
 import { ListingLabel } from '../components/Badges';
-import { useStore, type NewListing } from '../lib/store';
+import { useStore, type ListingCandidate, type NewListing } from '../lib/store';
+
+type TextField = Exclude<keyof NewListing, 'sourceIds'>;
 
 const BLANK: NewListing = { company: '', symbol: '', exchangeMic: '', exchangeName: '', currency: '', country: '', sector: '', isin: '', aliases: '' };
 
@@ -13,6 +15,7 @@ export function Search() {
   const results = useMemo(() => searchSecurities(q), [q, searchSecurities]);
   const events = useMemo(() => searchEvents(q), [q, searchEvents]);
   const [actionError, setActionError] = useState<string | null>(null);
+  const market = useMarketSearch();
 
   const toggle = async (id: string) => {
     setActionError(await (isWatched(id) ? removeFromWatchlist(id) : addToWatchlist(id)));
@@ -25,16 +28,29 @@ export function Search() {
         <p className="mt-1 text-sm text-slate-600">
           Search your registered listings by company, ticker, exchange or country. Tickers repeat across exchanges, so check the listing before adding.
         </p>
-        <label htmlFor="q" className="sr-only">Search securities and events</label>
-        <input
-          id="q"
-          type="search"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="e.g. Maybank, AAPL, Bursa, copper"
-          className="mt-3 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 md:max-w-xl"
-        />
+        <form
+          onSubmit={(e) => { e.preventDefault(); void market.run(q); }}
+          className="mt-3 flex flex-wrap gap-2"
+        >
+          <label htmlFor="q" className="sr-only">Search securities and events</label>
+          <input
+            id="q"
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="e.g. Maybank, AAPL, Samsung, copper"
+            className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 md:max-w-xl"
+          />
+          <button type="submit" disabled={market.busy || q.trim().length < 2}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50">
+            {market.busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Globe2 className="h-4 w-4" aria-hidden />}
+            Search all markets
+          </button>
+        </form>
+        <p className="mt-1.5 text-xs text-slate-500">Typing filters your registered listings. The button searches every exchange through the symbol provider.</p>
       </div>
+
+      <MarketResults state={market} />
 
       <section aria-labelledby="sec-h" className="space-y-2">
         <h2 id="sec-h" className="text-sm font-semibold text-slate-700">Listings ({results.length})</h2>
@@ -80,14 +96,127 @@ export function Search() {
 
       <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-slate-300 bg-white p-4">
         <div className="text-sm text-slate-600">
-          <div className="font-medium text-slate-800">Bounded live discovery</div>
-          Requests a fresh search across permitted feeds, subject to rate limits. Arrives with the collector.
+          <div className="font-medium text-slate-800">Refresh news now</div>
+          News refreshes on schedule (every 10 min in market hours). For an immediate run, use GitHub Actions → Collect news → Run workflow.
         </div>
-        <button type="button" disabled className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-md bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-400">
-          <Radar className="h-4 w-4" aria-hidden /> Refresh (unavailable)
-        </button>
+        <a href="https://github.com/chuayihong-beep/stk-trackr/actions/workflows/collect.yml" target="_blank" rel="noreferrer noopener"
+          className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-200">
+          <Radar className="h-4 w-4" aria-hidden /> Open collector
+        </a>
       </section>
     </div>
+  );
+}
+
+interface MarketState {
+  busy: boolean;
+  error: string | null;
+  results: ListingCandidate[] | null;
+  query: string;
+  run: (q: string) => Promise<void>;
+}
+
+function useMarketSearch(): MarketState {
+  const { searchMarkets } = useStore();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [results, setResults] = useState<ListingCandidate[] | null>(null);
+  const [query, setQuery] = useState('');
+  const run = async (q: string) => {
+    const term = q.trim();
+    if (term.length < 2) return;
+    setBusy(true);
+    setQuery(term);
+    const r = await searchMarkets(term);
+    setError(r.error);
+    setResults(r.error ? null : r.results);
+    setBusy(false);
+  };
+  return { busy, error, results, query, run };
+}
+
+function priceNote(c: ListingCandidate): { text: string; tone: string } {
+  if (!c.priceAccess) return { text: 'Price coverage unknown', tone: 'text-slate-500' };
+  if (c.priceAccess.toLowerCase() === 'basic') return { text: 'Prices on free plan', tone: 'text-emerald-700' };
+  return { text: `Prices need ${c.priceAccess} plan`, tone: 'text-amber-700' };
+}
+
+function MarketResults({ state }: { state: MarketState }) {
+  if (state.error) return <p role="alert" className="text-sm text-red-700">{state.error}</p>;
+  if (!state.results) return null;
+  return (
+    <section aria-labelledby="mkt-h" className="space-y-2">
+      <h2 id="mkt-h" className="text-sm font-semibold text-slate-700">
+        All markets for “{state.query}” ({state.results.length})
+      </h2>
+      {state.results.length === 0 ? (
+        <p className="text-sm text-slate-500">No listings found. Try the company's official name or ticker.</p>
+      ) : (
+        <ul className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white">
+          {state.results.map((c) => <MarketRow key={`${c.symbol}|${c.micCode}`} c={c} />)}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function MarketRow({ c }: { c: ListingCandidate }) {
+  const { findListing, addListing, addToWatchlist, isWatched } = useStore();
+  const [aliases, setAliases] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const existing = findListing(c.symbol, c.micCode);
+  const note = priceNote(c);
+  const missing = !c.country || !/^[A-Z]{3}$/.test(c.currency);
+
+  const register = async () => {
+    setBusy(true);
+    const { error: err, id } = await addListing({
+      company: c.name, symbol: c.symbol, exchangeMic: c.micCode, exchangeName: c.exchange,
+      currency: c.currency, country: c.country ?? '', aliases,
+      sourceIds: { [c.provider]: { symbol: c.symbol, mic_code: c.micCode, timezone: c.timezone, type: c.type } },
+    });
+    if (!err && id) setError(await addToWatchlist(id));
+    else setError(err);
+    setBusy(false);
+  };
+
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-3 p-4">
+      <div className="min-w-0">
+        <div className="font-medium">{c.name}</div>
+        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+          <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">{c.symbol}</span>
+          <span>{c.exchange} ({c.micCode})</span>
+          <span>· {c.currency} · {c.countryName || 'Country unknown'}</span>
+          {c.type && <span>· {c.type}</span>}
+        </div>
+        <div className={`mt-1 text-xs ${note.tone}`}>{note.text}</div>
+        {error && <div role="alert" className="mt-1 text-xs text-red-700">{error}</div>}
+      </div>
+      {existing ? (
+        <Link to={`/stock/${existing.id}`} className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
+          <Check className="h-4 w-4" aria-hidden /> {isWatched(existing.id) ? 'Watching' : 'Registered'}
+        </Link>
+      ) : missing ? (
+        <span className="text-xs text-slate-500">Missing country or currency. Use the manual form below.</span>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="sr-only" htmlFor={`al-${c.symbol}-${c.micCode}`}>Also known as</label>
+          <input
+            id={`al-${c.symbol}-${c.micCode}`}
+            value={aliases}
+            onChange={(e) => setAliases(e.target.value)}
+            placeholder="Also known as (optional)"
+            className="w-48 rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+          />
+          <button type="button" onClick={() => void register()} disabled={busy}
+            className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-60">
+            <Plus className="h-4 w-4" aria-hidden /> {busy ? 'Adding…' : 'Register & watch'}
+          </button>
+        </div>
+      )}
+    </li>
   );
 }
 
@@ -97,7 +226,7 @@ function AddListing() {
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [newId, setNewId] = useState<string | null>(null);
-  const set = (k: keyof NewListing) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const set = (k: TextField) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -114,11 +243,11 @@ function AddListing() {
   };
 
 
-  const field = (k: keyof NewListing, label: string, opts: { placeholder?: string; required?: boolean; pattern?: string; maxLength?: number; hint?: string } = {}) => (
+  const field = (k: TextField, label: string, opts: { placeholder?: string; required?: boolean; pattern?: string; maxLength?: number; hint?: string } = {}) => (
     <label className="block text-sm">
       <span className="text-slate-700">{label}{opts.required === false ? <span className="text-slate-400"> (optional)</span> : ''}</span>
       <input
-        value={form[k] ?? ''}
+        value={(form[k] as string | undefined) ?? ''}
         onChange={set(k)}
         required={opts.required !== false}
         placeholder={opts.placeholder ? `e.g. ${opts.placeholder}` : undefined}
@@ -132,9 +261,9 @@ function AddListing() {
 
   return (
     <section aria-labelledby="add-h" className="rounded-xl border border-slate-200 bg-white p-4">
-      <h2 id="add-h" className="text-sm font-semibold text-slate-800">Register a listing</h2>
+      <h2 id="add-h" className="text-sm font-semibold text-slate-800">Register a listing manually</h2>
       <p className="mt-1 text-xs text-slate-500">
-        Manual entry until symbol search is connected. Use the exchange's MIC code, e.g. XKLS (Bursa Malaysia), XNAS (Nasdaq), XNYS (NYSE), XHKG (Hong Kong), XSES (Singapore).
+        For listings the provider does not return. Use the exchange's MIC code, e.g. XKLS (Bursa Malaysia), XNAS (Nasdaq), XNYS (NYSE), XHKG (Hong Kong), XSES (Singapore).
       </p>
       <form onSubmit={onSubmit} className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {field('company', 'Company', { placeholder: 'Malayan Banking Berhad' })}

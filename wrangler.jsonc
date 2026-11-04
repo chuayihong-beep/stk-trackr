@@ -1,7 +1,8 @@
 {
-  // Serves the built React app as static assets on Cloudflare Workers.
+  // Static React app plus a small Worker for private /api/* routes.
   // "name" must match the Worker name in the Cloudflare dashboard.
   "name": "stk-trackr",
+  "main": "worker/index.ts",
   "compatibility_date": "2026-10-01",
   // Runs before every deploy, so the site builds even if the dashboard build command is empty.
   "build": {
@@ -9,6 +10,14 @@
   },
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "single-page-application"
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  // Public values. TWELVE_DATA_API_KEY is a secret: set it in the dashboard, never here.
+  "vars": {
+    "SUPABASE_URL": "https://vewqmxhweysgtkieahij.supabase.co",
+    "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_YSbKNXHg0xtlOxU84g1kWA_72QPrzbr",
+    "OWNER_EMAIL": "chua.yihong@gmail.com"
   }
 }

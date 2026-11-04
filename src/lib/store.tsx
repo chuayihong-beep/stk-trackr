@@ -34,6 +34,22 @@ export interface NewListing {
   sector?: string;
   isin?: string;
   aliases?: string; // comma-separated
+  sourceIds?: Record<string, unknown>;
+}
+
+/** One result from the Worker's /api/symbol-search (provider-neutral shape). */
+export interface ListingCandidate {
+  provider: string;
+  symbol: string;
+  name: string;
+  exchange: string;
+  micCode: string;
+  country: string | null;
+  countryName: string;
+  currency: string;
+  timezone: string;
+  type: string;
+  priceAccess: string | null;
 }
 
 export interface EventLink { event: EventItem; link: SecurityEvent }
@@ -56,9 +72,22 @@ interface StoreValue extends Snapshot {
   addToWatchlist: (id: string) => Promise<string | null>;
   removeFromWatchlist: (id: string) => Promise<string | null>;
   addListing: (l: NewListing) => Promise<{ error: string | null; id?: string }>;
+  updateAliases: (id: string, aliases: string) => Promise<string | null>;
+  searchMarkets: (q: string) => Promise<{ error: string | null; results: ListingCandidate[] }>;
+  findListing: (symbol: string, micCode: string) => Security | undefined;
 }
 
 const Ctx = createContext<StoreValue | null>(null);
+
+function parseAliases(text: string | undefined): string[] {
+  const seen = new Set<string>();
+  return (text ?? '').split(',').map((a) => a.trim()).filter((a) => {
+    const k = a.toLowerCase();
+    if (a.length < 3 || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
 
 // Row → app type mappers (snake_case → camelCase).
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -222,7 +251,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           country: l.country.trim().toUpperCase(),
           sector: l.sector?.trim() || null,
           isin: l.isin?.trim().toUpperCase() || null,
-          aliases: (l.aliases ?? '').split(',').map((a) => a.trim()).filter((a) => a.length >= 3),
+          aliases: parseAliases(l.aliases),
+          source_ids: l.sourceIds ?? {},
         }).select('*').single();
         if (err) {
           return { error: err.code === '23505' ? 'That symbol is already registered on this exchange.' : err.message };
@@ -233,6 +263,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }));
         return { error: null, id: data.id as string };
       },
+      updateAliases: async (id, aliases) => {
+        const list = parseAliases(aliases);
+        const { error: err } = await supabase.from('securities').update({ aliases: list }).eq('id', id);
+        if (err) return err.message;
+        setSnap((s) => ({ ...s, securities: s.securities.map((x) => (x.id === id ? { ...x, aliases: list } : x)) }));
+        return null;
+      },
+      searchMarkets: async (q) => {
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        if (!token) return { error: 'Sign in again to search.', results: [] };
+        try {
+          const r = await fetch(`/api/symbol-search?q=${encodeURIComponent(q)}`, {
+            headers: { authorization: `Bearer ${token}` },
+          });
+          const body = await r.json().catch(() => ({}));
+          if (!r.ok) return { error: body.error ?? `Search failed (${r.status}).`, results: [] };
+          return { error: null, results: body.results ?? [] };
+        } catch {
+          return { error: 'Search service unreachable.', results: [] };
+        }
+      },
+      findListing: (symbol, micCode) =>
+        snap.securities.find((s) => s.symbol.toUpperCase() === symbol.toUpperCase() && s.exchangeMic === micCode.toUpperCase()),
     };
   }, [snap, status, error, loadedAt, reload]);
 

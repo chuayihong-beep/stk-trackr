@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Star, StarOff } from 'lucide-react';
+import { ArrowLeft, Pencil, Star, StarOff } from 'lucide-react';
 import { EventCard } from '../components/EventCard';
 import { ListingLabel, QuoteBlock } from '../components/Badges';
 import { useStore } from '../lib/store';
@@ -41,7 +42,7 @@ export function StockDetail() {
           <h1 className="text-xl font-semibold">{s.company}</h1>
           <div className="mt-1.5"><ListingLabel s={s} /></div>
           <div className="mt-1 text-xs text-slate-500">Country {s.country}{s.sector ? ` · ${s.sector}` : ''}{s.isin ? ` · ISIN ${s.isin}` : ''}</div>
-          {s.aliases.length > 0 && <div className="mt-1 text-xs text-slate-500">Also matched as: {s.aliases.join(', ')}</div>}
+          <AliasEditor id={s.id} aliases={s.aliases} />
           <p className="mt-3 text-xs text-slate-500">
             Ticker “{s.symbol}” is not unique worldwide. This page is for this listing only.
           </p>
@@ -91,6 +92,45 @@ export function StockDetail() {
           ))}
         </ul>
       </section>
+    </div>
+  );
+}
+
+function AliasEditor({ id, aliases }: { id: string; aliases: string[] }) {
+  const { updateAliases } = useStore();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(aliases.join(', '));
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  if (!editing) {
+    return (
+      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+        <span>Also matched in headlines as: {aliases.length ? aliases.join(', ') : 'none'}</span>
+        <button type="button" onClick={() => { setValue(aliases.join(', ')); setEditing(true); }}
+          className="inline-flex items-center gap-1 text-brand hover:underline">
+          <Pencil className="h-3 w-3" aria-hidden /> Edit
+        </button>
+      </div>
+    );
+  }
+  const save = async () => {
+    setBusy(true);
+    const err = await updateAliases(id, value);
+    setBusy(false);
+    setError(err);
+    if (!err) setEditing(false);
+  };
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2">
+      <label htmlFor={`alias-${id}`} className="text-xs text-slate-600">Also known as</label>
+      <input id={`alias-${id}`} value={value} onChange={(e) => setValue(e.target.value)} placeholder="Maybank, MBB"
+        className="w-64 rounded-md border border-slate-300 px-2 py-1 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20" />
+      <button type="button" onClick={() => void save()} disabled={busy}
+        className="rounded-md bg-slate-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-700 disabled:opacity-60">Save</button>
+      <button type="button" onClick={() => setEditing(false)} className="text-xs text-slate-600 hover:underline">Cancel</button>
+      {error && <span role="alert" className="text-xs text-red-700">{error}</span>}
+      <span className="basis-full text-[11px] text-slate-400">Comma-separated. Names under 3 characters are ignored. Used by the collector from its next run.</span>
     </div>
   );
 }
