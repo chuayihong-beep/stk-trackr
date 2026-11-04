@@ -58,7 +58,8 @@ def run_prices_job(store) -> int:
     now = datetime.now(timezone.utc)
     try:
         stats = run_prices(store, td_key=td_key, eodhd_key=eodhd_key, get=http_get_json, now=now,
-                           sleep=time.sleep, force_eodhd=os.environ.get("FORCE_EODHD") == "true")
+                           sleep=time.sleep, force_eodhd=os.environ.get("FORCE_EODHD") == "true",
+                           recheck_unsupported=os.environ.get("RECHECK_UNSUPPORTED") == "true")
         record_health(store, stats, now, td_key=bool(td_key), eodhd_key=bool(eodhd_key))
     except Exception as e:  # noqa: BLE001
         print(json.dumps({"status": "failed", "error": _safe_error(e)}))

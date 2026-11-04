@@ -171,5 +171,52 @@ class PriceTests(unittest.TestCase):
             self.assertNotIn(secret, out)
 
 
+class EodFallbackTests(unittest.TestCase):
+    def provider(self, realtime_status):
+        calls = []
+
+        def get(url, params):
+            calls.append(url)
+            if "twelvedata" in url:
+                return 200, {"status": "error", "code": 403, "message": "plan"}
+            if "/api/real-time/" in url:
+                return realtime_status, ({"code": "x", "timestamp": "NA", "close": "NA"} if realtime_status == 200 else None)
+            if "/api/eod/" in url:
+                return 200, [{"date": "2026-11-03", "close": 10.38}, {"date": "2026-11-04", "close": 10.42}]
+            raise AssertionError(url)
+        return get, calls
+
+    def test_realtime_refused_falls_back_to_eod_close(self):
+        for status in (403, 404, 200):  # 200 with "NA" values = no delayed data
+            store = FakeStore([sec(1, "1155", "XKLS", "MYR")])
+            get, calls = self.provider(status)
+            s = run_prices(store, td_key="td-key", eodhd_key="eo-key", get=get, now=EVENING)
+            self.assertEqual((s.saved, s.eodhd_eod_fallbacks), (1, 1), status)
+            snap = store.snapshots[0]
+            self.assertEqual((snap["value"], snap["provider"], snap["currency"]), (10.42, "EODHD", "MYR"))
+            # Bursa closes 17:00 MYT = 09:00 UTC
+            self.assertEqual(snap["market_at"], "2026-11-04T09:00:00+00:00")
+            self.assertEqual(store.cache["price_usage"]["eodhd"], 2)
+            self.assertIn("twelvedata HTTP 403", s.unsupported_reasons)
+            self.assertTrue(any(r.startswith("eodhd realtime") for r in s.unsupported_reasons))
+
+    def test_recheck_flag_bypasses_weekly_hold(self):
+        store = FakeStore([sec(1, "1155", "XKLS", "MYR", price_provider="none", price_status="unsupported",
+                               price_checked_at=EVENING.isoformat())])
+        get, calls = self.provider(403)
+        run_prices(store, td_key="td-key", eodhd_key="eo-key", get=get, now=EVENING + timedelta(hours=1))
+        self.assertEqual(calls, [])
+        run_prices(store, td_key="td-key", eodhd_key="eo-key", get=get, now=EVENING + timedelta(hours=1),
+                   recheck_unsupported=True)
+        self.assertTrue(calls)
+        self.assertEqual(store.targets["s01"]["price_status"], "ok")
+
+    def test_reasons_hold_codes_not_symbols(self):
+        store = FakeStore([sec(1, "1155", "XKLS", "MYR")])
+        get, _ = self.provider(403)
+        s = run_prices(store, td_key="td-key", eodhd_key="eo-key", get=get, now=EVENING)
+        self.assertFalse(any("1155" in r or "KLSE" in r for r in s.unsupported_reasons))
+
+
 if __name__ == "__main__":
     unittest.main()

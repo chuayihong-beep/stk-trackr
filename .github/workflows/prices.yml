@@ -11,6 +11,10 @@ on:
         description: 'Also fetch EODHD listings now (normally only after 17:00 MYT)'
         type: boolean
         default: false
+      recheck_unsupported:
+        description: 'Re-check listings marked unsupported (normally weekly)'
+        type: boolean
+        default: false
 
 concurrency:
   group: prices
@@ -42,3 +46,4 @@ jobs:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
           EODHD_API_KEY: ${{ secrets.EODHD_API_KEY }}
           FORCE_EODHD: ${{ inputs.force_eodhd || 'false' }}
+          RECHECK_UNSUPPORTED: ${{ inputs.recheck_unsupported || 'false' }}

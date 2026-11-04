@@ -7,8 +7,9 @@ Anything neither covers is marked unsupported and shown as "Price unavailable".
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, time as dtime, timedelta, timezone
+from datetime import date, datetime, time as dtime, timedelta, timezone
 from typing import Any, Callable
+from zoneinfo import ZoneInfo
 
 MYT = timezone(timedelta(hours=8))
 TD_BASE = "https://api.twelvedata.com"
@@ -22,6 +23,12 @@ RECHECK_UNSUPPORTED = timedelta(days=7)
 
 # Verified from EODHD's docs (US = XNAS/XNYS/OTCM/XCBO, LSE = XLON) and its KLSE listings.
 EODHD_CODES = {"XNAS": "US", "XNYS": "US", "OTCM": "US", "XCBO": "US", "XLON": "LSE", "XKLS": "KLSE"}
+
+# Official closing times, used to timestamp end-of-day prices (EODHD exchange code → zone, close).
+EOD_CLOSE = {
+    "KLSE": ("Asia/Kuala_Lumpur", dtime(17, 0)), "US": ("America/New_York", dtime(16, 0)),
+    "LSE": ("Europe/London", dtime(16, 30)), "TO": ("America/Toronto", dtime(16, 0)),
+}
 
 HttpGet = Callable[[str, dict], tuple[int, Any]]
 
@@ -57,6 +64,8 @@ class PriceStats:
     eodhd_errors: int = 0
     td_used_today: int = 0
     eodhd_used_today: int = 0
+    eodhd_eod_fallbacks: int = 0
+    unsupported_reasons: list[str] = field(default_factory=list)  # provider + HTTP code only
     errors: list[str] = field(default_factory=list)
 
 
@@ -108,6 +117,32 @@ def eodhd_quote(get: HttpGet, key: str, ticker: str) -> Quote:
     return Quote(value, None, datetime.fromtimestamp(ts, tz=timezone.utc))
 
 
+def eodhd_eod_close(get: HttpGet, key: str, ticker: str, today: date) -> Quote:
+    """Latest end-of-day close (EODHD free plan: global EOD, 1 year)."""
+    status, body = get(f"{EODHD_BASE}/api/eod/{ticker}", {
+        "api_token": key, "fmt": "json", "order": "d", "from": (today - timedelta(days=10)).isoformat(),
+    })
+    if status in (402, 429):
+        raise ProviderError("rate_limited", f"eod HTTP {status}")
+    if status == 401:
+        raise ProviderError("auth", "eod HTTP 401")
+    if status in (403, 404):
+        raise ProviderError("unsupported", f"eod HTTP {status}")
+    if status != 200 or not isinstance(body, list):
+        raise ProviderError("error", f"eod HTTP {status}")
+    if not body:
+        raise ProviderError("unsupported", "eod no rows")
+    try:
+        row = max(body, key=lambda r: r["date"])
+        value = float(row["close"])
+        day = date.fromisoformat(row["date"])
+    except (KeyError, TypeError, ValueError):
+        raise ProviderError("unsupported", "eod malformed") from None
+    zone, close = EOD_CLOSE.get(ticker.rsplit(".", 1)[-1], ("UTC", dtime(12, 0)))  # noon UTC when close time unknown
+    market_at = datetime.combine(day, close, ZoneInfo(zone)).astimezone(timezone.utc)
+    return Quote(value, None, market_at)
+
+
 def eodhd_exchange_codes(get: HttpGet, key: str) -> dict[str, str]:
     status, body = get(f"{EODHD_BASE}/api/exchanges-list/", {"api_token": key, "fmt": "json"})
     if status != 200 or not isinstance(body, list):
@@ -125,7 +160,7 @@ def eodhd_exchange_codes(get: HttpGet, key: str) -> dict[str, str]:
 
 def run_prices(store, *, td_key: str | None, eodhd_key: str | None, get: HttpGet,
                now: datetime | None = None, sleep: Callable[[float], None] | None = None,
-               force_eodhd: bool = False) -> PriceStats:
+               force_eodhd: bool = False, recheck_unsupported: bool = False) -> PriceStats:
     now = now or datetime.now(timezone.utc)
     sleep = sleep or (lambda s: None)
     stats = PriceStats()
@@ -195,6 +230,17 @@ def run_prices(store, *, td_key: str | None, eodhd_key: str | None, get: HttpGet
             return eodhd_quote(get, eodhd_key or "", ticker)
         except ProviderError as e:
             e.provider = "eodhd"
+            if e.kind != "unsupported" or usage["eodhd"] >= EODHD_DAILY_CAP:
+                raise
+            stats.unsupported_reasons.append(f"eodhd realtime {e.detail}")
+        # Delayed quote refused: fall back to the latest end-of-day close (1 more call).
+        usage["eodhd"] += 1
+        stats.eodhd_calls += 1
+        stats.eodhd_eod_fallbacks += 1
+        try:
+            return eodhd_eod_close(get, eodhd_key or "", ticker, now.astimezone(MYT).date())
+        except ProviderError as e:
+            e.provider = "eodhd"
             raise
 
     def eodhd_available(sec_id: str) -> bool:
@@ -224,7 +270,8 @@ def run_prices(store, *, td_key: str | None, eodhd_key: str | None, get: HttpGet
         symbol, mic = sec["symbol"], sec["exchange_mic"]
         td_symbol = ((sec.get("source_ids") or {}).get("twelvedata") or {}).get("symbol") or symbol
         checked = sec.get("price_checked_at")
-        if route == "none" and checked and now - datetime.fromisoformat(checked) < RECHECK_UNSUPPORTED:
+        if (route == "none" and checked and not recheck_unsupported
+                and now - datetime.fromisoformat(checked) < RECHECK_UNSUPPORTED):
             stats.unsupported += 1
             continue
 
@@ -239,6 +286,7 @@ def run_prices(store, *, td_key: str | None, eodhd_key: str | None, get: HttpGet
                     except ProviderError as e:
                         if e.kind != "unsupported":
                             raise
+                        stats.unsupported_reasons.append(f"twelvedata {e.detail}")
                         td_said_unsupported = True
                 elif td_key:
                     stats.skipped_waiting += 1  # Twelve Data paused this run; try again next run
@@ -259,6 +307,7 @@ def run_prices(store, *, td_key: str | None, eodhd_key: str | None, get: HttpGet
                     except ProviderError as e:
                         if e.kind != "unsupported":
                             raise
+                        stats.unsupported_reasons.append(f"eodhd {e.detail}")
                         mark(sec, "none", "unsupported")
                         stats.unsupported += 1
                 else:
@@ -288,6 +337,7 @@ def run_prices(store, *, td_key: str | None, eodhd_key: str | None, get: HttpGet
     elif stats.errors_count:
         stats.status = "partial"
     stats.errors = sorted(set(stats.errors))[:10]
+    stats.unsupported_reasons = sorted(set(stats.unsupported_reasons))[:10]
     return stats
 
 
