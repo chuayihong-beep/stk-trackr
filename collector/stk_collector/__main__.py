@@ -8,7 +8,7 @@ import sys
 import time
 from datetime import datetime, timezone
 
-from .db import SupabaseStore, http_get_json
+from .db import DbError, SupabaseStore, http_get_json
 from .pipeline import run, summary
 from .prices import record_health, run_prices
 from .prices import summary as price_summary
@@ -35,10 +35,18 @@ def main() -> int:
     try:
         stats = run(store, edition=os.environ.get("NEWS_EDITION", "en-MY"))
     except Exception as e:  # already recorded in collector_runs
-        print(json.dumps({"status": "failed", "error": type(e).__name__}))
+        print(json.dumps({"status": "failed", "error": _safe_error(e)}))
         return 1
     print(json.dumps(summary(stats)))
     return 1 if stats.status == "failed" else 0
+
+
+def _safe_error(e: Exception) -> str:
+    """DbError messages hold only method, table, HTTP status and error code (no values), so they
+    are safe for public logs. Anything else is reduced to its type name."""
+    if isinstance(e, DbError):
+        return f"DbError: {e}"
+    return type(e).__name__
 
 
 def run_prices_job(store) -> int:
@@ -53,7 +61,7 @@ def run_prices_job(store) -> int:
                            sleep=time.sleep, force_eodhd=os.environ.get("FORCE_EODHD") == "true")
         record_health(store, stats, now, td_key=bool(td_key), eodhd_key=bool(eodhd_key))
     except Exception as e:  # noqa: BLE001
-        print(json.dumps({"status": "failed", "error": type(e).__name__}))
+        print(json.dumps({"status": "failed", "error": _safe_error(e)}))
         return 1
     print(json.dumps(price_summary(stats)))
     return 1 if stats.status == "failed" else 0
