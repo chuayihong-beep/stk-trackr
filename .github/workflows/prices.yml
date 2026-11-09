@@ -3,8 +3,9 @@ name: Collect prices
 # Weekdays 09:15, 11:15, 13:15, 15:15, 17:15 MYT (UTC+8). Nothing overnight or at weekends.
 # Twelve Data serves covered listings every run; EODHD serves the rest once, at the 17:15 run.
 on:
-  schedule:
-    - cron: '15 1,3,5,7,9 * * 1-5'
+  # Schedule paused on 2026-11-09 (owner request). Restore by uncommenting.
+  # PAUSED schedule:
+  # PAUSED   - cron: '15 1,3,5,7,9 * * 1-5'
   workflow_dispatch:
     inputs:
       force_eodhd:

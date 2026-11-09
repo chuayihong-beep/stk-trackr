@@ -3,9 +3,10 @@ name: Collect news
 # Brief §4 schedule. Cron is UTC; MYT = UTC+8.
 # GitHub may start scheduled runs late at busy times; collection is idempotent, so late or skipped runs are safe.
 on:
-  schedule:
-    - cron: '*/10 1-8 * * *'      # 09:00–16:50 MYT, every 10 minutes (48 runs)
-    - cron: '0,30 0,9-23 * * *'   # 17:00–08:30 MYT, every 30 minutes (32 runs)
+  # Schedule paused on 2026-11-09 (owner request). Restore by uncommenting.
+  # PAUSED schedule:
+  # PAUSED   - cron: '*/10 1-8 * * *'      # 09:00–16:50 MYT, every 10 minutes (48 runs)
+  # PAUSED   - cron: '0,30 0,9-23 * * *'   # 17:00–08:30 MYT, every 30 minutes (32 runs)
   workflow_dispatch:
 
 concurrency:
