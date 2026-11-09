@@ -52,10 +52,13 @@ class FakeStore:
         self.runs[run_id].update(f)
 
     def insert_article(self, row):
-        assert row["canonical_url"] not in {a["canonical_url"] for a in self.articles}, "L1 unique violated"
+        # Mirrors the database: canonical_url is unique, duplicates return the existing row.
+        for a in self.articles:
+            if a["canonical_url"] == row["canonical_url"]:
+                return a["id"], False
         row = {**row, "id": f"a{len(self.articles) + 1}"}
         self.articles.append(row)
-        return row["id"]
+        return row["id"], True
 
     def touch_articles(self, ids, now):
         self.touched |= set(ids)
@@ -172,6 +175,23 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual((stats2.new_articles, stats2.new_events), (0, 0))
         self.assertEqual(len(store.articles), 4)
         self.assertTrue({"a1", "a2", "a3", "a4"} <= store.touched)
+
+    def test_article_older_than_dedup_window_does_not_crash(self):
+        # Regression (2026-11-06): an item first stored 4 days ago reappeared in Google News.
+        # It was outside the 72 h window, so the insert hit the unique URL constraint and the run failed.
+        old = {"id": "a1", "canonical_url": "https://news.google.com/rss/articles/A", "title": "Maybank posts record quarterly profit",
+               "title_fingerprint": "maybank posts record quarterly profit", "publisher": "The Star",
+               "first_seen_at": NOW - timedelta(days=4)}
+        store = FakeStore([MAYBANK], articles=[old])
+        fetch = self.feed(
+            ("Maybank posts record quarterly profit - The Star", "https://news.google.com/rss/articles/A?oc=5", None, "The Star"),
+            ("Maybank names new chief risk officer - Bernama", "https://news.google.com/rss/articles/C", None, "Bernama"),
+        )
+        stats = pipeline.run(store, fetch=fetch, now=NOW, pause_seconds=0)
+        self.assertEqual(stats.status, "success")
+        self.assertEqual((stats.already_stored, stats.new_articles), (1, 1))
+        self.assertIn("a1", store.touched)
+        self.assertEqual(len(store.articles), 2)
 
     def test_total_fetch_failure_keeps_previous_success_time(self):
         store = FakeStore([MAYBANK])

@@ -110,13 +110,20 @@ def _collect(store, fetch, now, edition, pause_seconds, stats: Stats) -> None:
             continue
 
         published, verified, flag = parse_published(item.published, now)
-        if flag:
-            stats.flagged_timestamps += 1
-        article_id = store.insert_article({
+        article_id, created = store.insert_article({
             "canonical_url": url, "title": title, "title_fingerprint": fp, "publisher": publisher,
             "source_id": SOURCE["id"], "published_at": published, "published_verified": verified,
             "timestamp_flag": flag, "first_seen_at": now, "last_seen_at": now,
         })
+        if not created:
+            # Stored before the 72 h window (Google News can resurface older items): just mark it seen.
+            touch.add(article_id)
+            stats.already_stored += 1
+            by_url[url] = {"id": article_id, "canonical_url": url, "title": title, "title_fingerprint": fp,
+                           "publisher": publisher, "event_ids": []}
+            continue
+        if flag:
+            stats.flagged_timestamps += 1
         stats.new_articles += 1
         inserted.add(article_id)
 

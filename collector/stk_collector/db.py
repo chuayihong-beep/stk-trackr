@@ -62,9 +62,19 @@ class SupabaseStore:
         self._req("PATCH", "/collector_runs", params={"id": f"eq.{run_id}"}, json=_jsonable(fields),
                   prefer="return=minimal")
 
-    def insert_article(self, row: dict) -> str:
-        rows = self._req("POST", "/articles", json=_jsonable(row), prefer="return=representation")
-        return rows[0]["id"]
+    def insert_article(self, row: dict) -> tuple[str, bool]:
+        """Insert unless the canonical URL is already stored (it may be older than the dedup window).
+        Returns (article_id, inserted)."""
+        rows = self._req("POST", "/articles", params={"on_conflict": "canonical_url"}, json=_jsonable(row),
+                         prefer="resolution=ignore-duplicates,return=representation")
+        if rows:
+            return rows[0]["id"], True
+        existing = self._req("GET", "/articles", params={
+            "select": "id", "canonical_url": f"eq.{row['canonical_url']}", "limit": "1",
+        })
+        if not existing:
+            raise DbError("POST /articles ignored but no existing row found")
+        return existing[0]["id"], False
 
     def touch_articles(self, ids: set[str], now: datetime) -> None:
         ids_list = sorted(ids)
